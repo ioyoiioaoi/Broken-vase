@@ -49,7 +49,7 @@
 
 <body>
   <div id="loading">Loading Art Experience...</div>
-  <div id="instructions">Drag Background to Rotate • Drag Cube to Throw</div>
+  <div id="instructions">Drag Background to Rotate • Double Tap Cube to Launch</div>
   <script type="module">
     import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
 
@@ -342,7 +342,7 @@
       }
     }
 
-    // --- Interaction (Grab, Throw, Camera Rotate) ---
+    // --- Interaction (Grab, Throw, Camera Rotate, Double Tap) ---
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     let draggedCube = null;
@@ -354,6 +354,10 @@
     // Camera Control State
     let lastClientX = 0;
     let isDraggingBackground = false;
+
+    // Double Tap State
+    let lastTapTime = 0;
+    let lastTappedObj = null;
 
     function updateMouse(event) {
       let clientX, clientY;
@@ -379,8 +383,29 @@
       const intersects = raycaster.intersectObjects(cubes);
 
       if (intersects.length > 0) {
+        const clickedObj = intersects[0].object;
+        const now = Date.now();
+
+        // Double Tap Detection
+        if (clickedObj === lastTappedObj && now - lastTapTime < 300) {
+          // LAUNCH!
+          clickedObj.userData.velocity.set(
+            (Math.random() - 0.5) * 4,
+            (Math.random() - 0.5) * 4 + 2, // Bias upwards
+            (Math.random() - 0.5) * 4
+          );
+          soundManager.playThrow();
+          draggedCube = null; // Cancel grab
+          lastTappedObj = null;
+          lastTapTime = 0;
+          return;
+        }
+
+        lastTapTime = now;
+        lastTappedObj = clickedObj;
+
         // Grab Cube
-        draggedCube = intersects[0].object;
+        draggedCube = clickedObj;
         draggedCube.userData.isGrabbed = true;
         draggedCube.userData.velocity.set(0, 0, 0);
         soundManager.playGrab();
@@ -428,8 +453,9 @@
         const now = performance.now();
         const dt = (now - lastTime) / 1000;
 
-        const throwVel = new THREE.Vector3().subVectors(draggedCube.position, previousMousePos).multiplyScalar(5);
-        throwVel.clampLength(0, 2.5);
+        // Increased sensitivity (x15)
+        const throwVel = new THREE.Vector3().subVectors(draggedCube.position, previousMousePos).multiplyScalar(15);
+        throwVel.clampLength(0, 4.0); // Higher max speed
 
         draggedCube.userData.velocity.copy(throwVel);
         draggedCube.userData.isGrabbed = false;
